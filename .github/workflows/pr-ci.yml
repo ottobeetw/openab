@@ -1,1 +1,77 @@
+name: PR CI
 
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: pr-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
+
+      - name: Show PR info
+        run: |
+          echo "PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
+          echo "Branch: ${{ github.event.pull_request.head.ref }}"
+          echo "Base: ${{ github.event.pull_request.base.ref }}"
+          echo "Author: ${{ github.event.pull_request.user.login }}"
+          git log --oneline -3
+
+      - name: Run cargo test
+        run: cargo test --all-features 2>&1 | tail -50
+
+      - name: Run cargo clippy
+        run: cargo clippy --all-features -- -D warnings 2>&1 | tail -50
+
+      - name: Run cargo build
+        run: cargo build --all-features --release 2>&1 | tail -20
+
+  discord-notify:
+    needs: test
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Post result to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PR_CI }}
+        run: |
+          RESULT="${{ needs.test.result }}"
+          if [ "$RESULT" = "success" ]; then
+            STATUS="✅ PASS"
+            COLOR="3066993"
+            DESC="All checks passed! :white_check_mark:"
+          else
+            STATUS="❌ FAIL"
+            COLOR="15158332"
+            DESC="Tests failed. :x:"
+          fi
+
+          PAYLOAD=$(cat << EOF
+          {
+            "embeds": [{
+              "title": "PR CI #${{ github.event.pull_request.number }}",
+              "description": "${DESC}",
+              "color": "${COLOR}",
+              "url": "${{ github.event.pull_request.html_url }}",
+              "fields": [
+                { "name": "PR", "value": "${{ github.event.pull_request.title }}", "inline": true },
+                { "name": "Branch", "value": "${{ github.event.pull_request.head.ref }}", "inline": true },
+                { "name": "Author", "value": "${{ github.event.pull_request.user.login }}", "inline": true },
+                { "name": "Status", "value": "${STATUS}", "inline": true }
+              ],
+              "footer": { "text": "openab · PR CI" }
+            }]
+          }
+          EOF)
+          curl -s -H "Content-Type: application/json" -d "${PAYLOAD}" "${DISCORD_WEBHOOK}"
