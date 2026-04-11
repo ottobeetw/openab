@@ -17,3 +17,4 @@ anyhow = "1"
 rand = "0.8"
 clap = { version = "4", features = ["derive"] }
 rpassword = "7"
+tempfile = "3"

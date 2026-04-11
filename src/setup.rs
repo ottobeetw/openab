@@ -36,6 +36,20 @@ error_hold_ms = 2500
 
 const VALID_AGENTS: [&str; 3] = ["claude", "kiro", "codex"];
 
+/// Check if config.toml exists at given path
+pub fn config_file_exists(path: &std::path::Path) -> bool {
+    path.exists()
+}
+
+/// Prompt user for overwrite confirmation (returns true to overwrite)
+pub fn prompt_overwrite() -> anyhow::Result<bool> {
+    print!("config.toml 已存在，確定要覆寫嗎？(y/N): ");
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    Ok(input.trim().eq_ignore_ascii_case("y"))
+}
+
 /// Validate bot_token for TOML safety (no quotes or newlines)
 pub fn validate_bot_token(token: &str) -> anyhow::Result<()> {
     if token.contains('"') {
@@ -82,6 +96,14 @@ pub fn run_setup() -> anyhow::Result<()> {
     println!();
     println!("  🤖 OpenAB 互動設定精靈");
     println!();
+
+    // Check for existing config
+    if config_file_exists(std::path::Path::new("config.toml")) {
+        if !prompt_overwrite()? {
+            println!("取消設定。");
+            return Ok(());
+        }
+    }
 
     // 1. Bot Token
     print!("? Bot Token: ");
@@ -253,5 +275,40 @@ mod tests {
         let config = generate_config("sk-ant...shes", "claude", "123");
 
         assert!(config.contains(r#"bot_token = "sk-ant...shes""#));
+    }
+
+    #[test]
+    fn test_config_file_exists_when_file_present() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+        std::fs::write(&config_path, "test").unwrap();
+        assert!(config_file_exists(&config_path));
+    }
+
+    #[test]
+    fn test_config_file_exists_when_file_absent() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("config.toml");
+        assert!(!config_file_exists(&config_path));
+    }
+
+    #[test]
+    fn test_prompt_overwrite_logic() {
+        // Test that "y" and "Y" return true, others return false
+        // We can't fully test prompt_overwrite (requires stdin), but we test
+        // the helper logic it uses: eq_ignore_ascii_case
+        fn check_overwrite(input: &str) -> bool {
+            input.trim().eq_ignore_ascii_case("y")
+        }
+
+        assert!(check_overwrite("y"));
+        assert!(check_overwrite("Y"));
+        assert!(check_overwrite("y\n"));
+        assert!(check_overwrite(" y "));
+        assert!(!check_overwrite("n"));
+        assert!(!check_overwrite("N"));
+        assert!(!check_overwrite(""));
+        assert!(!check_overwrite("yes"));
+        assert!(!check_overwrite("yy"));
     }
 }
