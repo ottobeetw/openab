@@ -44,7 +44,8 @@ jobs:
     steps:
       - name: Post result to Discord
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_PR_CI }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
         run: |
           RESULT="${{ needs.test.result }}"
           if [ "$RESULT" = "success" ]; then
@@ -57,7 +58,7 @@ jobs:
             DESC="Tests failed. :x:"
           fi
 
-          PAYLOAD=$(cat << EOF
+          PAYLOAD=$(cat << 'EOF'
           {
             "embeds": [{
               "title": "PR CI #${{ github.event.pull_request.number }}",
@@ -74,4 +75,8 @@ jobs:
             }]
           }
           EOF)
-          curl -s -H "Content-Type: application/json" -d "${PAYLOAD}" "${DISCORD_WEBHOOK}"
+          curl -s \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bot ${DISCORD_BOT_TOKEN}" \
+            -d "${PAYLOAD}" \
+            "https://discord.com/api/v10/channels/${DISCORD_CHANNEL_ID}/messages"
