@@ -107,7 +107,7 @@ pub fn validate_channel_id(id: &str) -> anyhow::Result<()> {
 }
 
 /// Generate config.toml content from provided values using proper TOML serialization
-pub fn generate_config(bot_token: &str, agent_command: &str, channel_ids: Vec<String>) -> String {
+pub fn generate_config(bot_token: &str, agent_command: &str, channel_ids: Vec<String>, working_dir: &str) -> String {
     let config = Config {
         discord: DiscordConfig {
             bot_token: bot_token.to_string(),
@@ -116,7 +116,7 @@ pub fn generate_config(bot_token: &str, agent_command: &str, channel_ids: Vec<St
         agent: AgentConfig {
             command: agent_command.to_string(),
             args: vec!["acp".to_string(), "--trust-all-tools".to_string()],
-            working_dir: "/home/agent".to_string(),
+            working_dir: working_dir.to_string(),
         },
         pool: PoolConfig {
             max_sessions: 10,
@@ -193,8 +193,14 @@ pub fn run_setup() -> anyhow::Result<()> {
         anyhow::bail!("{}", e);
     }
 
+    // Derive working_dir based on agent (kiro uses /home/agent, others use /home/node)
+    let working_dir = match agent_command {
+        "kiro" => "/home/agent",
+        _ => "/home/node",
+    };
+
     // Generate and write config
-    let config_content = generate_config(&bot_token, agent_command, vec![channel_id.to_string()]);
+    let config_content = generate_config(&bot_token, agent_command, vec![channel_id.to_string()], working_dir);
     std::fs::write("config.toml", &config_content)
         .map_err(|e| anyhow::anyhow!("Failed to write config.toml: {}", e))?;
 
@@ -286,7 +292,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_basic() {
-        let config = generate_config("my_token", "claude", vec!["1492329565824094370".to_string()]);
+        let config = generate_config("my_token", "claude", vec!["1492329565824094370".to_string()], "/home/node");
 
         assert!(config.contains(r#"bot_token = "my_token""#));
         assert!(config.contains(r#"allowed_channels = ["1492329565824094370"]"#));
@@ -295,7 +301,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_kiro_agent() {
-        let config = generate_config("token123", "kiro", vec!["999888777".to_string()]);
+        let config = generate_config("token123", "kiro", vec!["999888777".to_string()], "/home/agent");
 
         assert!(config.contains(r#"bot_token = "token123""#));
         assert!(config.contains(r#"allowed_channels = ["999888777"]"#));
@@ -304,7 +310,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_contains_required_sections() {
-        let config = generate_config("t", "c", vec!["1".to_string()]);
+        let config = generate_config("t", "c", vec!["1".to_string()], "/home/node");
 
         // Discord section
         assert!(config.contains("[discord]"));
@@ -316,7 +322,7 @@ mod tests {
         assert!(config.contains("command"));
         assert!(config.contains("acp"));
         assert!(config.contains("--trust-all-tools"));
-        assert!(config.contains(r#"working_dir = "/home/agent""#));
+        assert!(config.contains(r#"working_dir = "/home/node""#));
 
         // Pool section
         assert!(config.contains("[pool]"));
@@ -332,7 +338,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_no_placeholder_leftover() {
-        let config = generate_config("token", "agent", vec!["channel".to_string()]);
+        let config = generate_config("token", "agent", vec!["channel".to_string()], "/home/node");
 
         assert!(!config.contains("{bot_token}"));
         assert!(!config.contains("{agent_command}"));
@@ -342,7 +348,7 @@ mod tests {
     #[test]
     fn test_generate_config_special_characters_in_token() {
         // Tokens may contain special chars (but not quotes or newlines)
-        let config = generate_config("sk-ant...shes", "claude", vec!["123".to_string()]);
+        let config = generate_config("sk-ant...shes", "claude", vec!["123".to_string()], "/home/node");
 
         assert!(config.contains(r#"bot_token = "sk-ant...shes""#));
     }
