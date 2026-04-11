@@ -23,7 +23,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// 互動式設定精靈，產生 config.toml
+    /// Interactive setup wizard that generates config.toml
     Setup,
     /// 執行 Bot（預設）
     Run {

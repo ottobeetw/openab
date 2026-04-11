@@ -50,13 +50,13 @@ pub fn prompt_overwrite() -> anyhow::Result<bool> {
     Ok(input.trim().eq_ignore_ascii_case("y"))
 }
 
-/// Validate bot_token for TOML safety (rejects quotes and newlines)
+/// Validate bot_token for TOML safety using allowlist (ASCII alphanumeric, dash, period, underscore)
 pub fn validate_bot_token(token: &str) -> anyhow::Result<()> {
-    if token.contains('"') {
-        anyhow::bail!("Token must not contain quote characters");
+    if token.is_empty() {
+        anyhow::bail!("Token cannot be empty");
     }
-    if token.contains('\n') {
-        anyhow::bail!("Token must not contain newline characters");
+    if !token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_') {
+        anyhow::bail!("Token must only contain ASCII letters, numbers, dashes, periods, or underscores");
     }
     Ok(())
 }
@@ -110,10 +110,7 @@ pub fn run_setup() -> anyhow::Result<()> {
     io::stdout().flush()?;
     let bot_token = rpassword::read_password()?;
     if let Err(e) = validate_bot_token(&bot_token) {
-        anyhow::bail!("Invalid token format: {}", e);
-    }
-    if bot_token.trim().is_empty() {
-        anyhow::bail!("Bot Token cannot be empty");
+        anyhow::bail!("Invalid token: {}", e);
     }
 
     // 2. Agent Command
@@ -122,13 +119,16 @@ pub fn run_setup() -> anyhow::Result<()> {
     let mut agent_command = String::new();
     io::stdin().read_line(&mut agent_command)?;
     let agent_command = agent_command.trim();
-    let agent_command = if agent_command.is_empty() { "claude" } else { agent_command };
+    let agent_command = if agent_command.is_empty() {
+        "claude"
+    } else {
+        agent_command
+    };
     if let Err(e) = validate_agent_command(agent_command) {
         anyhow::bail!("{}", e);
     }
 
     // 3. Channel ID
-    println!();
     print!("? Allowed channel ID: ");
     io::stdout().flush()?;
     let mut channel_id = String::new();
@@ -164,20 +164,34 @@ mod tests {
     fn test_validate_bot_token_ok() {
         assert!(validate_bot_token("sk-ant-token123").is_ok());
         assert!(validate_bot_token("simple_token").is_ok());
+        assert!(validate_bot_token("token.with-dashes_123").is_ok());
     }
 
     #[test]
-    fn test_validate_bot_token_rejects_quote() {
+    fn test_validate_bot_token_rejects_invalid_chars() {
+        // Quotes are rejected (not in allowlist)
         let result = validate_bot_token("token\"with\"quote");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("quote"));
+        assert!(result.unwrap_err().to_string().contains("ASCII"));
+
+        // Newlines are rejected
+        let result = validate_bot_token("token\nwith\nnewline");
+        assert!(result.is_err());
+
+        // Tab is rejected
+        let result = validate_bot_token("token\twith\ttab");
+        assert!(result.is_err());
+
+        // Space is rejected
+        let result = validate_bot_token("token with space");
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_validate_bot_token_rejects_newline() {
-        let result = validate_bot_token("token\nwith\nnewline");
+    fn test_validate_bot_token_rejects_empty() {
+        let result = validate_bot_token("");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("newline"));
+        assert!(result.unwrap_err().to_string().contains("empty"));
     }
 
     #[test]
