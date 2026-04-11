@@ -1,40 +1,63 @@
 use std::io::{self, Write};
-
-const CONFIG_TEMPLATE: &str = r#"[discord]
-bot_token = "{bot_token}"
-allowed_channels = [{allowed_channels}]
-
-[agent]
-command = "{agent_command}"
-args = ["acp", "--trust-all-tools"]
-working_dir = "/home/agent"
-
-[pool]
-max_sessions = 10
-session_ttl_hours = 24
-
-[reactions]
-enabled = true
-remove_after_reply = false
-
-[reactions.emojis]
-queued = "👀"
-thinking = "🤔"
-tool = "🔥"
-coding = "👨💻"
-web = "⚡"
-done = "🆗"
-error = "😱"
-
-[reactions.timing]
-debounce_ms = 700
-stall_soft_ms = 10000
-stall_hard_ms = 30000
-done_hold_ms = 1500
-error_hold_ms = 2500
-"#;
+use serde::Serialize;
 
 const VALID_AGENTS: [&str; 3] = ["claude", "kiro", "codex"];
+
+/// Top-level config structure for config.toml
+#[derive(Serialize)]
+struct Config {
+    discord: DiscordConfig,
+    agent: AgentConfig,
+    pool: PoolConfig,
+    reactions: ReactionsConfig,
+}
+
+#[derive(Serialize)]
+struct DiscordConfig {
+    bot_token: String,
+    allowed_channels: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct AgentConfig {
+    command: String,
+    args: Vec<String>,
+    working_dir: String,
+}
+
+#[derive(Serialize)]
+struct PoolConfig {
+    max_sessions: u32,
+    session_ttl_hours: u32,
+}
+
+#[derive(Serialize)]
+struct ReactionsConfig {
+    enabled: bool,
+    remove_after_reply: bool,
+    emojis: EmojisConfig,
+    timing: TimingConfig,
+}
+
+#[derive(Serialize)]
+struct EmojisConfig {
+    queued: String,
+    thinking: String,
+    tool: String,
+    coding: String,
+    web: String,
+    done: String,
+    error: String,
+}
+
+#[derive(Serialize)]
+struct TimingConfig {
+    debounce_ms: u32,
+    stall_soft_ms: u32,
+    stall_hard_ms: u32,
+    done_hold_ms: u32,
+    error_hold_ms: u32,
+}
 
 /// Check if config.toml exists at the given path
 pub fn config_file_exists(path: &std::path::Path) -> bool {
@@ -83,12 +106,44 @@ pub fn validate_channel_id(id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Generate config.toml content from provided values
-pub fn generate_config(bot_token: &str, agent_command: &str, channel_id: &str) -> String {
-    CONFIG_TEMPLATE
-        .replace("{bot_token}", bot_token)
-        .replace("{allowed_channels}", &format!("\"{}\"", channel_id))
-        .replace("{agent_command}", agent_command)
+/// Generate config.toml content from provided values using proper TOML serialization
+pub fn generate_config(bot_token: &str, agent_command: &str, channel_ids: Vec<String>) -> String {
+    let config = Config {
+        discord: DiscordConfig {
+            bot_token: bot_token.to_string(),
+            allowed_channels: channel_ids,
+        },
+        agent: AgentConfig {
+            command: agent_command.to_string(),
+            args: vec!["acp".to_string(), "--trust-all-tools".to_string()],
+            working_dir: "/home/agent".to_string(),
+        },
+        pool: PoolConfig {
+            max_sessions: 10,
+            session_ttl_hours: 24,
+        },
+        reactions: ReactionsConfig {
+            enabled: true,
+            remove_after_reply: false,
+            emojis: EmojisConfig {
+                queued: "👀".to_string(),
+                thinking: "🤔".to_string(),
+                tool: "🔥".to_string(),
+                coding: "👨💻".to_string(),
+                web: "⚡".to_string(),
+                done: "🆗".to_string(),
+                error: "😱".to_string(),
+            },
+            timing: TimingConfig {
+                debounce_ms: 700,
+                stall_soft_ms: 10000,
+                stall_hard_ms: 30000,
+                done_hold_ms: 1500,
+                error_hold_ms: 2500,
+            },
+        },
+    };
+    toml::to_string_pretty(&config).expect("config serialization failed")
 }
 
 /// Interactive setup wizard
@@ -139,7 +194,7 @@ pub fn run_setup() -> anyhow::Result<()> {
     }
 
     // Generate and write config
-    let config_content = generate_config(&bot_token, agent_command, &channel_id);
+    let config_content = generate_config(&bot_token, agent_command, vec![channel_id.to_string()]);
     std::fs::write("config.toml", &config_content)
         .map_err(|e| anyhow::anyhow!("Failed to write config.toml: {}", e))?;
 
@@ -231,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_basic() {
-        let config = generate_config("my_token", "claude", "1492329565824094370");
+        let config = generate_config("my_token", "claude", vec!["1492329565824094370".to_string()]);
 
         assert!(config.contains(r#"bot_token = "my_token""#));
         assert!(config.contains(r#"allowed_channels = ["1492329565824094370"]"#));
@@ -240,7 +295,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_kiro_agent() {
-        let config = generate_config("token123", "kiro", "999888777");
+        let config = generate_config("token123", "kiro", vec!["999888777".to_string()]);
 
         assert!(config.contains(r#"bot_token = "token123""#));
         assert!(config.contains(r#"allowed_channels = ["999888777"]"#));
@@ -249,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_contains_required_sections() {
-        let config = generate_config("t", "c", "1");
+        let config = generate_config("t", "c", vec!["1".to_string()]);
 
         // Discord section
         assert!(config.contains("[discord]"));
@@ -259,7 +314,8 @@ mod tests {
         // Agent section
         assert!(config.contains("[agent]"));
         assert!(config.contains("command"));
-        assert!(config.contains(r#"args = ["acp", "--trust-all-tools"]"#));
+        assert!(config.contains("acp"));
+        assert!(config.contains("--trust-all-tools"));
         assert!(config.contains(r#"working_dir = "/home/agent""#));
 
         // Pool section
@@ -276,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_no_placeholder_leftover() {
-        let config = generate_config("token", "agent", "channel");
+        let config = generate_config("token", "agent", vec!["channel".to_string()]);
 
         assert!(!config.contains("{bot_token}"));
         assert!(!config.contains("{agent_command}"));
@@ -286,7 +342,7 @@ mod tests {
     #[test]
     fn test_generate_config_special_characters_in_token() {
         // Tokens may contain special chars (but not quotes or newlines)
-        let config = generate_config("sk-ant...shes", "claude", "123");
+        let config = generate_config("sk-ant...shes", "claude", vec!["123".to_string()]);
 
         assert!(config.contains(r#"bot_token = "sk-ant...shes""#));
     }

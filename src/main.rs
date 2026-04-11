@@ -25,9 +25,9 @@ struct Cli {
 enum Commands {
     /// Interactive setup wizard that generates config.toml
     Setup,
-    /// 執行 Bot（預設）
+    /// Run the bot (default)
     Run {
-        /// 設定檔路徑（預設: config.toml）
+        /// Config file path (default: config.toml)
         config: Option<std::path::PathBuf>,
     },
 }
