@@ -46,6 +46,7 @@ jobs:
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+          DISCORD_MENTION_ID: ${{ secrets.DISCORD_MENTION_ID }}
         run: |
           RESULT="${{ needs.test.result }}"
           if [ "$RESULT" = "success" ]; then
@@ -58,8 +59,10 @@ jobs:
             DESC="Tests failed. :x:"
           fi
 
+          CONTENT="<@${DISCORD_MENTION_ID}> PR CI #${{ github.event.pull_request.number }} — ${STATUS}"
+
           curl -s \
             -H "Content-Type: application/json" \
             -H "Authorization: Bot ${DISCORD_BOT_TOKEN}" \
-            -d "{\"embeds\": [{\"title\": \"PR CI #${{ github.event.pull_request.number }}\", \"description\": \"${DESC}\", \"color\": ${COLOR}, \"url\": \"${{ github.event.pull_request.html_url }}\", \"fields\": [{\"name\": \"PR\", \"value\": \"${{ github.event.pull_request.title }}\", \"inline\": true}, {\"name\": \"Branch\", \"value\": \"${{ github.event.pull_request.head.ref }}\", \"inline\": true}, {\"name\": \"Author\", \"value\": \"${{ github.event.pull_request.user.login }}\", \"inline\": true}, {\"name\": \"Status\", \"value\": \"${STATUS}\", \"inline\": true}], \"footer\": {\"text\": \"openab · PR CI\"}}]}" \
+            -d "{\"content\": \"${CONTENT}\", \"embeds\": [{\"title\": \"PR CI #${{ github.event.pull_request.number }}\", \"description\": \"${DESC}\", \"color\": ${COLOR}, \"url\": \"${{ github.event.pull_request.html_url }}\", \"fields\": [{\"name\": \"PR\", \"value\": \"${{ github.event.pull_request.title }}\", \"inline\": true}, {\"name\": \"Branch\", \"value\": \"${{ github.event.pull_request.head.ref }}\", \"inline\": true}, {\"name\": \"Author\", \"value\": \"${{ github.event.pull_request.user.login }}\", \"inline\": true}], \"footer\": {\"text\": \"openab · PR CI\"}}]}" \
             "https://discord.com/api/v10/channels/${DISCORD_CHANNEL_ID}/messages"
