@@ -17,6 +17,8 @@ anyhow = "1"
 rand = "0.8"
 clap = { version = "4", features = ["derive"] }
 rpassword = "7"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+base64 = "0.22"
 
 [dev-dependencies]
 tempfile = "3"
