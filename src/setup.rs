@@ -36,27 +36,27 @@ error_hold_ms = 2500
 
 const VALID_AGENTS: [&str; 3] = ["claude", "kiro", "codex"];
 
-/// Check if config.toml exists at given path
+/// Check if config.toml exists at the given path
 pub fn config_file_exists(path: &std::path::Path) -> bool {
     path.exists()
 }
 
-/// Prompt user for overwrite confirmation (returns true to overwrite)
+/// Prompt user for overwrite confirmation, returns true to overwrite
 pub fn prompt_overwrite() -> anyhow::Result<bool> {
-    print!("config.toml 已存在，確定要覆寫嗎？(y/N): ");
+    print!("config.toml already exists. Overwrite? (y/N): ");
     io::stdout().flush()?;
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
     Ok(input.trim().eq_ignore_ascii_case("y"))
 }
 
-/// Validate bot_token for TOML safety (no quotes or newlines)
+/// Validate bot_token for TOML safety (rejects quotes and newlines)
 pub fn validate_bot_token(token: &str) -> anyhow::Result<()> {
     if token.contains('"') {
-        anyhow::bail!("Token 不能包含引號字符");
+        anyhow::bail!("Token must not contain quote characters");
     }
     if token.contains('\n') {
-        anyhow::bail!("Token 不能包含換行符");
+        anyhow::bail!("Token must not contain newline characters");
     }
     Ok(())
 }
@@ -65,7 +65,7 @@ pub fn validate_bot_token(token: &str) -> anyhow::Result<()> {
 pub fn validate_agent_command(cmd: &str) -> anyhow::Result<()> {
     if !VALID_AGENTS.contains(&cmd) {
         anyhow::bail!(
-            "Agent 命令必須是 {} 之一",
+            "Agent command must be one of: {}",
             VALID_AGENTS.join(", ")
         );
     }
@@ -75,10 +75,10 @@ pub fn validate_agent_command(cmd: &str) -> anyhow::Result<()> {
 /// Validate channel ID is numeric
 pub fn validate_channel_id(id: &str) -> anyhow::Result<()> {
     if id.is_empty() {
-        anyhow::bail!("頻道 ID 不能為空白");
+        anyhow::bail!("Channel ID cannot be empty");
     }
     if !id.chars().all(|c| c.is_ascii_digit()) {
-        anyhow::bail!("頻道 ID 必須是純數字");
+        anyhow::bail!("Channel ID must be numeric only");
     }
     Ok(())
 }
@@ -94,13 +94,13 @@ pub fn generate_config(bot_token: &str, agent_command: &str, channel_id: &str) -
 /// Interactive setup wizard
 pub fn run_setup() -> anyhow::Result<()> {
     println!();
-    println!("  🤖 OpenAB 互動設定精靈");
+    println!("  🤖 OpenAB Interactive Setup Wizard");
     println!();
 
     // Check for existing config
     if config_file_exists(std::path::Path::new("config.toml")) {
         if !prompt_overwrite()? {
-            println!("取消設定。");
+            println!("Setup cancelled.");
             return Ok(());
         }
     }
@@ -110,14 +110,14 @@ pub fn run_setup() -> anyhow::Result<()> {
     io::stdout().flush()?;
     let bot_token = rpassword::read_password()?;
     if let Err(e) = validate_bot_token(&bot_token) {
-        anyhow::bail!("Token 格式錯誤: {}", e);
+        anyhow::bail!("Invalid token format: {}", e);
     }
     if bot_token.trim().is_empty() {
-        anyhow::bail!("Bot Token 不能為空白");
+        anyhow::bail!("Bot Token cannot be empty");
     }
 
-    // 2. Agent Command (single line prompt)
-    print!("? Agent 命令 (claude/kiro/codex) [claude]: ");
+    // 2. Agent Command
+    print!("? Agent command (claude/kiro/codex) [claude]: ");
     io::stdout().flush()?;
     let mut agent_command = String::new();
     io::stdin().read_line(&mut agent_command)?;
@@ -129,7 +129,7 @@ pub fn run_setup() -> anyhow::Result<()> {
 
     // 3. Channel ID
     println!();
-    print!("? 允許頻道 ID: ");
+    print!("? Allowed channel ID: ");
     io::stdout().flush()?;
     let mut channel_id = String::new();
     io::stdin().read_line(&mut channel_id)?;
@@ -141,16 +141,16 @@ pub fn run_setup() -> anyhow::Result<()> {
     // Generate and write config
     let config_content = generate_config(&bot_token, agent_command, &channel_id);
     std::fs::write("config.toml", &config_content)
-        .map_err(|e| anyhow::anyhow!("寫入 config.toml 失敗: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to write config.toml: {}", e))?;
 
     println!();
-    println!("✅ config.toml 已產生！");
+    println!("✅ config.toml generated!");
     println!();
-    println!("執行方式:");
-    println!("  openab              # 使用 config.toml");
-    println!("  openab run [路徑]   # 使用指定設定檔");
+    println!("Run with:");
+    println!("  openab              # uses config.toml");
+    println!("  openab run [path]   # uses custom config");
     println!();
-    println!("提示：日後可在 config.toml 的 allowed_channels 加入更多頻道");
+    println!("Tip: You can add more channel IDs to allowed_channels in config.toml");
     println!();
 
     Ok(())
@@ -170,14 +170,14 @@ mod tests {
     fn test_validate_bot_token_rejects_quote() {
         let result = validate_bot_token("token\"with\"quote");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("引號"));
+        assert!(result.unwrap_err().to_string().contains("quote"));
     }
 
     #[test]
     fn test_validate_bot_token_rejects_newline() {
         let result = validate_bot_token("token\nwith\nnewline");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("換行"));
+        assert!(result.unwrap_err().to_string().contains("newline"));
     }
 
     #[test]
@@ -205,14 +205,14 @@ mod tests {
     fn test_validate_channel_id_empty() {
         let result = validate_channel_id("");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("空白"));
+        assert!(result.unwrap_err().to_string().contains("empty"));
     }
 
     #[test]
     fn test_validate_channel_id_non_numeric() {
         let result = validate_channel_id("abc123");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("純數字"));
+        assert!(result.unwrap_err().to_string().contains("numeric"));
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_generate_config_special_characters_in_token() {
-        // Token 可能包含特殊字元（但不含引號或換行）
+        // Tokens may contain special chars (but not quotes or newlines)
         let config = generate_config("sk-ant...shes", "claude", "123");
 
         assert!(config.contains(r#"bot_token = "sk-ant...shes""#));
@@ -294,9 +294,7 @@ mod tests {
 
     #[test]
     fn test_prompt_overwrite_logic() {
-        // Test that "y" and "Y" return true, others return false
-        // We can't fully test prompt_overwrite (requires stdin), but we test
-        // the helper logic it uses: eq_ignore_ascii_case
+        // y and Y return true, everything else returns false
         fn check_overwrite(input: &str) -> bool {
             input.trim().eq_ignore_ascii_case("y")
         }
