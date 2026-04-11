@@ -58,25 +58,8 @@ jobs:
             DESC="Tests failed. :x:"
           fi
 
-          PAYLOAD=$(cat << 'EOF'
-          {
-            "embeds": [{
-              "title": "PR CI #${{ github.event.pull_request.number }}",
-              "description": "${DESC}",
-              "color": "${COLOR}",
-              "url": "${{ github.event.pull_request.html_url }}",
-              "fields": [
-                { "name": "PR", "value": "${{ github.event.pull_request.title }}", "inline": true },
-                { "name": "Branch", "value": "${{ github.event.pull_request.head.ref }}", "inline": true },
-                { "name": "Author", "value": "${{ github.event.pull_request.user.login }}", "inline": true },
-                { "name": "Status", "value": "${STATUS}", "inline": true }
-              ],
-              "footer": { "text": "openab · PR CI" }
-            }]
-          }
-          EOF)
           curl -s \
             -H "Content-Type: application/json" \
             -H "Authorization: Bot ${DISCORD_BOT_TOKEN}" \
-            -d "${PAYLOAD}" \
+            -d "{\"embeds\": [{\"title\": \"PR CI #${{ github.event.pull_request.number }}\", \"description\": \"${DESC}\", \"color\": ${COLOR}, \"url\": \"${{ github.event.pull_request.html_url }}\", \"fields\": [{\"name\": \"PR\", \"value\": \"${{ github.event.pull_request.title }}\", \"inline\": true}, {\"name\": \"Branch\", \"value\": \"${{ github.event.pull_request.head.ref }}\", \"inline\": true}, {\"name\": \"Author\", \"value\": \"${{ github.event.pull_request.user.login }}\", \"inline\": true}, {\"name\": \"Status\", \"value\": \"${STATUS}\", \"inline\": true}], \"footer\": {\"text\": \"openab · PR CI\"}}]}" \
             "https://discord.com/api/v10/channels/${DISCORD_CHANNEL_ID}/messages"
